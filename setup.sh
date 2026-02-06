@@ -1,5 +1,5 @@
 ### VARIABLES TO CHANGE - START
-PROJECT_ID= susana-rojas-fiu
+PROJECT_ID= ise-lab2-cicd-thepack
 PROJECT_NUMBER= 577210663794
 SERVICE_NAME= mango-website
 GITHUB_ORG= https://github.com/CodePath-Tech-Exchange-CTEx
