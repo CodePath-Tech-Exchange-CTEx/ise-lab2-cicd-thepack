@@ -1,8 +1,11 @@
-# TODO: Replace with your team name
+# TODO: The Pack
 
 ## Our Team
 
-TODO: Replace with your team members
+TODO: 
+Tesfaye Kefene
+Nishan Kafle 
+Susana Rojas
 
 # Setup
 
