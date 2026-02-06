@@ -1,9 +1,9 @@
 ### VARIABLES TO CHANGE - START
-PROJECT_ID= susana-rojas-fiu
-PROJECT_NUMBER= 577210663794
-SERVICE_NAME= ise-lab2-cicd-thepack
-GITHUB_ORG= CodePath-Tech-Exchange-CTEx
-GITHUB_REPO= ise-lab2-cicd-thepack
+PROJECT_ID= 'susana-rojas-fiu'
+PROJECT_NUMBER= '577210663794'
+SERVICE_NAME= 'ise-lab2-cicd-thepack'
+GITHUB_ORG= 'CodePath-Tech-Exchange-CTEx'
+GITHUB_REPO= 'ise-lab2-cicd-thepack'
 
 ### VARIABLES TO CHANGE - END
 
