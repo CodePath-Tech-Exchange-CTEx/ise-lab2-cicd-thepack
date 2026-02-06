@@ -1,9 +1,9 @@
 ### VARIABLES TO CHANGE - START
-PROJECT_ID=
-PROJECT_NUMBER=
-SERVICE_NAME=
-GITHUB_ORG=
-GITHUB_REPO=
+PROJECT_ID= susana-rojas-fiu
+PROJECT_NUMBER= 577210663794
+SERVICE_NAME= mango-website
+GITHUB_ORG= https://github.com/CodePath-Tech-Exchange-CTEx
+GITHUB_REPO= https://github.com/CodePath-Tech-Exchange-CTEx/ise-lab2-cicd-thepack
 ### VARIABLES TO CHANGE - END
 
 # ----------- Set Up GCP Project ----------- #
