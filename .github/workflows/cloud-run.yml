@@ -5,17 +5,17 @@ name: Cloud Run Continuous Deployment
 on:
   push:
     # TODO: change 'none' to 'main' to enable the workflow to run
-    branches: 'none'
+    branches: 'main'
   release:
     types: [published]
 
 env:
   # TODO: Paste output from setup.sh below.
-  PROJECT_ID: ''
-  SERVICE_NAME: ''
-  SERVICE_REGION: ''
-  SERVICE_ACCOUNT: ''
-  WORKLOAD_IDENTITY_PROVIDER: ''
+  PROJECT_ID: 'susana-rojas-fiu'
+  SERVICE_NAME: 'ise-lab2-cicd-thepack'
+  SERVICE_REGION: 'us-central1'
+  SERVICE_ACCOUNT: '577210663794-compute@developer.gserviceaccount.com'
+  WORKLOAD_IDENTITY_PROVIDER: 'projects/577210663794/locations/global/workloadIdentityPools/github-provider/providers/github-project-repo'
 
 jobs:
   py-checks:

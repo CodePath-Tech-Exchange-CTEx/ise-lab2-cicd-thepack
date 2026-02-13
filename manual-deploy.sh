@@ -1,6 +1,6 @@
 ### VARIABLES TO CHANGE - START
-PROJECT_ID=
-SERVICE_NAME=
+PROJECT_ID='susana-rojas-fiu'
+SERVICE_NAME='ise-lab2-cicd-thepack'
 ### VARIABLES TO CHANGE - END
 
 # ----------- Manual Deployment ------------ #
