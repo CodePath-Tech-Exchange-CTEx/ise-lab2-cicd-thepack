@@ -7,6 +7,7 @@
 # function other than the example.
 #############################################################################
 
+import streamlit as st
 from internals import create_component
 
 
@@ -47,8 +48,8 @@ def display_post(username, user_image, timestamp, content, post_image):
         st.markdown(f"**{username}**")
         st.caption(str(timestamp))
     st.write(content)
-    if post_image:
-        st.image(post_image, use_column_width=True)
+    if post_image and post_image.startswith('http'):
+        st.image(post_image, use_container_width=True)
     st.divider()
     
 
@@ -106,5 +107,5 @@ def display_genai_advice(timestamp, content, image):
     st.caption(str(timestamp))
     st.info(content)
     if image:
-        st.image(image, use_column_width=True)
+        st.image(image, use_container_width=True)
     st.divider()
