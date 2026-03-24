@@ -2,112 +2,65 @@
 # data_fetcher.py
 #
 # This file contains functions to fetch data needed for the app.
-#
-# You will re-write these functions in Unit 3, and are welcome to alter the
-# data returned in the meantime. We will replace this file with other data when
-# testing earlier units.
 #############################################################################
 
 import random
+from google.cloud import bigquery
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
-# users = {
-#     'user1': {
-#         'full_name': 'Remi',
-#         'username': 'remi_the_rems',
-#         'date_of_birth': '1990-01-01',
-#         'profile_image': 'https://upload.wikimedia.org/wikipedia/commons/c/c8/Puma_shoes.jpg',
-#         'friends': ['user2', 'user3', 'user4'],
-#     },
-#     'user2': {
-#         'full_name': 'Blake',
-#         'username': 'blake',
-#         'date_of_birth': '1990-01-01',
-#         'profile_image': 'https://upload.wikimedia.org/wikipedia/commons/c/c8/Puma_shoes.jpg',
-#         'friends': ['user1'],
-#     },
-#     'user3': {
-#         'full_name': 'Jordan',
-#         'username': 'jordanjordanjordan',
-#         'date_of_birth': '1990-01-01',
-#         'profile_image': 'https://upload.wikimedia.org/wikipedia/commons/c/c8/Puma_shoes.jpg',
-#         'friends': ['user1', 'user4'],
-#     },
-#     'user4': {
-#         'full_name': 'Gemmy',
-#         'username': 'gems',
-#         'date_of_birth': '1990-01-01',
-#         'profile_image': 'https://upload.wikimedia.org/wikipedia/commons/c/c8/Puma_shoes.jpg',
-#         'friends': ['user1', 'user3'],
-#     },
-# }
+PROJECT_ID = 'tesfaye-kefene-fisk'
+DATASET = 'ISE'
 
 
 def get_user_sensor_data(user_id, workout_id):
-    """Returns a list of timestampped information for a given workout.
-
-    This function currently returns random data. You will re-write it in Unit 3.
-    """
-    from google.cloud import bigquery
-
-    client = bigquery.Client()
+    """Returns a list of timestamped information for a given workout."""
+    client = bigquery.Client(project=PROJECT_ID)
 
     # Query SensorData and JOIN SensorTypes to get sensor name and units
-    query = """
-        SELECT st.Name as sensor_type, sd.Timestamp, sd.SensorValue as data, st.Units as units
-        FROM `tesfaye-kefene-fisk.ISE.SensorData` sd
-        JOIN `tesfaye-kefene-fisk.ISE.SensorTypes` st ON sd.SensorId = st.SensorId
+    query = f"""
+        SELECT st.Name, st.Units, sd.Timestamp, sd.SensorValue
+        FROM `{PROJECT_ID}.{DATASET}.SensorData` sd
+        JOIN `{PROJECT_ID}.{DATASET}.SensorTypes` st ON sd.SensorId = st.SensorId
         WHERE sd.WorkoutID = @workout_id
+        ORDER BY sd.Timestamp
     """
-
-    # Use parameterized query to safely pass workout_id
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("workout_id", "STRING", workout_id)]
+        query_parameters=[
+            bigquery.ScalarQueryParameter('workout_id', 'STRING', workout_id),
+        ]
     )
-
-    results = client.query(query, job_config=job_config).result()
-
-    # Build a list of sensor data dictionaries matching the required output format
-    sensor_data = []
-    for row in results:
-        sensor_data.append({
-            'sensor_type': row.sensor_type,
+    rows = client.query(query, job_config=job_config).result()
+    return [
+        {
+            'sensor_type': row.Name,
             'timestamp': str(row.Timestamp),
-            'data': row.data,
-            'units': row.units,
-        })
-    return sensor_data
+            'data': row.SensorValue,
+            'units': row.Units,
+        }
+        for row in rows
+    ]
 
 
 def get_user_workouts(user_id):
-    """Returns a list of user's workouts.
-
-    This function currently returns random data. You will re-write it in Unit 3.
-    """
-    from google.cloud import bigquery
-
-    client = bigquery.Client()
+    """Returns a list of user's workouts."""
+    client = bigquery.Client(project=PROJECT_ID)
 
     # Query Workouts table for all workouts belonging to the given user
-    query = """
-        SELECT WorkoutId, StartTimestamp, EndTimestamp,
-               StartLocationLat, StartLocationLong,
-               EndLocationLat, EndLocationLong,
-               TotalDistance, TotalSteps, CaloriesBurned
-        FROM `tesfaye-kefene-fisk.ISE.Workouts`
+    query = f"""
+        SELECT *
+        FROM `{PROJECT_ID}.{DATASET}.Workouts`
         WHERE UserId = @user_id
+        ORDER BY StartTimestamp DESC
     """
-
-    # Use parameterized query to safely pass user_id
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("user_id", "STRING", user_id)]
+        query_parameters=[
+            bigquery.ScalarQueryParameter('user_id', 'STRING', user_id),
+        ]
     )
-
-    results = client.query(query, job_config=job_config).result()
-
-    # Build a list of workout dictionaries matching the required output format
-    workouts = []
-    for row in results:
-        workouts.append({
+    rows = client.query(query, job_config=job_config).result()
+    return [
+        {
             'workout_id': row.WorkoutId,
             'start_timestamp': str(row.StartTimestamp),
             'end_timestamp': str(row.EndTimestamp),
@@ -116,116 +69,112 @@ def get_user_workouts(user_id):
             'distance': row.TotalDistance,
             'steps': row.TotalSteps,
             'calories_burned': row.CaloriesBurned,
-        })
-    return workouts
+        }
+        for row in rows
+    ]
 
 
 def get_user_profile(user_id):
-    """Returns information about the given user.
+    """Returns information about the given user."""
+    client = bigquery.Client(project=PROJECT_ID)
 
-    This function currently returns random data. You will re-write it in Unit 3.
+    # Query Users table for the user's profile
+    query = f"""
+        SELECT Name, Username, DateOfBirth, ImageUrl
+        FROM `{PROJECT_ID}.{DATASET}.Users`
+        WHERE UserId = @user_id
     """
-    from google.cloud import bigquery
-
-    client = bigquery.Client()
-
-    # Query Users table and LEFT JOIN Friends to get the user's friend list
-    # LEFT JOIN ensures we still return the user even if they have no friends
-    query = """
-        SELECT u.Name, u.Username, u.ImageUrl, u.DateOfBirth,
-               f.UserId2 as FriendId
-        FROM `tesfaye-kefene-fisk.ISE.Users` u
-        LEFT JOIN `tesfaye-kefene-fisk.ISE.Friends` f ON u.UserId = f.UserId1
-        WHERE u.UserId = @user_id
-    """
-
-    # Use parameterized query to safely pass user_id
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("user_id", "STRING", user_id)]
+        query_parameters=[
+            bigquery.ScalarQueryParameter('user_id', 'STRING', user_id),
+        ]
     )
-
-    results = client.query(query, job_config=job_config).result()
-
-    profile = None
-    friends = []
-
-    # Each row represents one friend, so we build the profile once
-    # and collect all friend IDs across rows
-    for row in results:
-        if profile is None:
-            profile = {
-                'full_name': row.Name,
-                'username': row.Username,
-                'date_of_birth': str(row.DateOfBirth),
-                'profile_image': row.ImageUrl,
-                'friends': [],
-            }
-        if row.FriendId:
-            friends.append(row.FriendId)
-
-    # If no rows returned, the user does not exist
-    if profile is None:
+    rows = list(client.query(query, job_config=job_config).result())
+    if not rows:
         raise ValueError(f'User {user_id} not found.')
+    user = rows[0]
 
-    profile['friends'] = friends
-    return profile
+    # Query Friends table checking both directions of friendship
+    friends_query = f"""
+        SELECT
+            CASE WHEN UserId1 = @user_id THEN UserId2 ELSE UserId1 END AS FriendId
+        FROM `{PROJECT_ID}.{DATASET}.Friends`
+        WHERE UserId1 = @user_id OR UserId2 = @user_id
+    """
+    friends_rows = client.query(friends_query, job_config=job_config).result()
+    friends = [row.FriendId for row in friends_rows]
+
+    return {
+        'full_name': user.Name,
+        'username': user.Username,
+        'date_of_birth': str(user.DateOfBirth),
+        'profile_image': user.ImageUrl,
+        'friends': friends,
+    }
 
 
 def get_user_posts(user_id):
-    """Returns a list of a user's posts.
-
-    This function currently returns random data. You will re-write it in Unit 3.
-    """
-    from google.cloud import bigquery
-
-    client = bigquery.Client()
+    """Returns a list of a user's posts."""
+    client = bigquery.Client(project=PROJECT_ID)
 
     # Query Posts table for all posts belonging to the given user
-    query = """
+    query = f"""
         SELECT PostId, AuthorId, Timestamp, ImageUrl, Content
-        FROM `tesfaye-kefene-fisk.ISE.Posts`
+        FROM `{PROJECT_ID}.{DATASET}.Posts`
         WHERE AuthorId = @user_id
+        ORDER BY Timestamp DESC
     """
-
-    # Use parameterized query to safely pass user_id
     job_config = bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ScalarQueryParameter("user_id", "STRING", user_id)]
+        query_parameters=[
+            bigquery.ScalarQueryParameter('user_id', 'STRING', user_id),
+        ]
     )
-
-    results = client.query(query, job_config=job_config).result()
-
-    # Build a list of post dictionaries matching the required output format
-    posts = []
-    for row in results:
-        posts.append({
+    rows = client.query(query, job_config=job_config).result()
+    return [
+        {
             'user_id': row.AuthorId,
             'post_id': row.PostId,
             'timestamp': str(row.Timestamp),
             'content': row.Content,
             'image': row.ImageUrl,
-        })
-    return posts
-
+        }
+        for row in rows
+    ]
 
 
 def get_genai_advice(user_id):
-    """Returns the most recent advice from the genai model.
+    """Returns advice from Vertex AI based on the user's workout data."""
+    client = bigquery.Client(project=PROJECT_ID)
+    workouts = get_user_workouts(user_id)
+    profile = get_user_profile(user_id)
 
-    This function currently returns random data. You will re-write it in Unit 3.
-    """
-    advice = random.choice([
-        'Your heart rate indicates you can push yourself further. You got this!',
-        "You're doing great! Keep up the good work.",
-        'You worked hard yesterday, take it easy today.',
-        'You have burned 100 calories so far today!',
-    ])
+    workout_summary = ''
+    if workouts:
+        latest = workouts[0]
+        workout_summary = (
+            f"Latest workout: {latest['steps']} steps, "
+            f"{latest['distance']} km, "
+            f"{latest['calories_burned']} calories burned."
+        )
+
+    prompt = (
+        f"You are a fitness coach. Give one short encouraging tip (2-3 sentences) "
+        f"to {profile['full_name']} based on their recent activity. {workout_summary}"
+    )
+
+    vertexai.init(project=PROJECT_ID, location='us-central1')
+    model = GenerativeModel('gemini-2.5-flash-lite')
+    response = model.generate_content(prompt)
+    advice_text = response.text
+
     image = random.choice([
-        'https://plus.unsplash.com/premium_photo-1669048780129-051d670fa2d1?q=80&w=3870&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+        'https://plus.unsplash.com/premium_photo-1669048780129-051d670fa2d1?q=80&w=3870&auto=format&fit=crop',
         None,
     ])
+
     return {
         'advice_id': 'advice1',
-        'timestamp': '2024-01-01 00:00:00',
-        'content': advice,
+        'timestamp': str(__import__('datetime').datetime.now()),
+        'content': advice_text,
         'image': image,
     }
