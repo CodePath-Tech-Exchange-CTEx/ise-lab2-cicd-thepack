@@ -1,2 +1,4 @@
 streamlit
 google-cloud-bigquery
+google-cloud-aiplatform
+google-cloud-aiplatform
