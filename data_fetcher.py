@@ -146,7 +146,7 @@ def get_genai_advice(user_id):
     )  # Line written by Gemini
 
     vertexai.init(project=PROJECT_ID, location='us-central1')
-    model = GenerativeModel('gemini-1.5-flash')
+    model = GenerativeModel('gemini-2.5-flash-lite')
     response = model.generate_content(prompt)
     advice_text = response.text  
 
