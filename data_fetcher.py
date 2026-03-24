@@ -9,10 +9,10 @@ from google.cloud import bigquery
 
 PROJECT_ID = 'susana-rojas-fiu'
 DATASET = 'ISE'
-client = bigquery.Client(project=PROJECT_ID)
 
 def get_user_sensor_data(user_id, workout_id):
     """Returns a list of timestamped information for a given workout."""
+    client = bigquery.Client(project=PROJECT_ID)
     query = f"""
         SELECT st.Name, st.Units, sd.Timestamp, sd.SensorValue
         FROM `{PROJECT_ID}.{DATASET}.SensorData` sd
@@ -37,6 +37,7 @@ def get_user_sensor_data(user_id, workout_id):
     ]  
 
 def get_user_workouts(user_id):
+    client = bigquery.Client(project=PROJECT_ID)
     """Returns a list of user's workouts."""
     query = f"""
         SELECT *
@@ -65,6 +66,7 @@ def get_user_workouts(user_id):
     ]  
 
 def get_user_profile(user_id):
+    client = bigquery.Client(project=PROJECT_ID)
     """Returns information about the given user."""
     query = f"""
         SELECT Name, Username, DateOfBirth, ImageUrl
@@ -99,6 +101,7 @@ def get_user_profile(user_id):
     }  
 
 def get_user_posts(user_id):
+    client = bigquery.Client(project=PROJECT_ID)
     """Returns a list of a user's posts."""
     query = f"""
         SELECT PostId, AuthorId, Timestamp, ImageUrl, Content
@@ -124,6 +127,7 @@ def get_user_posts(user_id):
     ] 
 
 def get_genai_advice(user_id):
+    client = bigquery.Client(project=PROJECT_ID)
     """Returns advice from Vertex AI based on the user's workout data."""
     import vertexai
     from vertexai.generative_models import GenerativeModel
