@@ -1,5 +1,5 @@
 ### VARIABLES TO CHANGE - START
-PROJECT_ID='susana-rojas-fiu'
+PROJECT_ID='tesfaye-kefene-fisk'
 SERVICE_NAME='ise-lab2-cicd-thepack'
 ### VARIABLES TO CHANGE - END
 
