@@ -233,8 +233,8 @@ class TestGetGenaiAdvice(unittest.TestCase):
         mock_profile.return_value = {'full_name': 'Alice', 'username': 'alicej',
                                      'date_of_birth': '1990-01-15', 'profile_image': None, 'friends': []}
         mock_workouts.return_value = []
-        with patch('data_fetcher.vertexai.init'), \
-             patch('data_fetcher.GenerativeModel') as mock_model_class:
+        with patch('vertexai.init'), \
+             patch('vertexai.generative_models.GenerativeModel') as mock_model_class:
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
         self.assertIsInstance(result, dict)
@@ -245,8 +245,8 @@ class TestGetGenaiAdvice(unittest.TestCase):
         mock_profile.return_value = {'full_name': 'Alice', 'username': 'alicej',
                                      'date_of_birth': '1990-01-15', 'profile_image': None, 'friends': []}
         mock_workouts.return_value = []
-        with patch('data_fetcher.vertexai.init'), \
-             patch('data_fetcher.GenerativeModel') as mock_model_class:
+        with patch('vertexai.init'), \
+             patch('vertexai.generative_models.GenerativeModel') as mock_model_class:
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
         for key in ('advice_id', 'timestamp', 'content', 'image'):
@@ -258,8 +258,8 @@ class TestGetGenaiAdvice(unittest.TestCase):
         mock_profile.return_value = {'full_name': 'Alice', 'username': 'alicej',
                                      'date_of_birth': '1990-01-15', 'profile_image': None, 'friends': []}
         mock_workouts.return_value = []
-        with patch('data_fetcher.vertexai.init'), \
-             patch('data_fetcher.GenerativeModel') as mock_model_class:
+        with patch('vertexai.init'), \
+             patch('vertexai.generative_models.GenerativeModel') as mock_model_class:
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
         self.assertIsInstance(result['content'], str)
@@ -271,12 +271,11 @@ class TestGetGenaiAdvice(unittest.TestCase):
         mock_profile.return_value = {'full_name': 'Alice', 'username': 'alicej',
                                      'date_of_birth': '1990-01-15', 'profile_image': None, 'friends': []}
         mock_workouts.return_value = []
-        with patch('data_fetcher.vertexai.init'), \
-             patch('data_fetcher.GenerativeModel') as mock_model_class:
+        with patch('vertexai.init'), \
+             patch('vertexai.generative_models.GenerativeModel') as mock_model_class:
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
         self.assertTrue(result['image'] is None or isinstance(result['image'], str))
-
 
 if __name__ == '__main__':
     unittest.main()
