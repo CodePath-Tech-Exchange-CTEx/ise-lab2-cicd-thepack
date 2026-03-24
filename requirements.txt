@@ -1,1 +1,1 @@
-streamlit
+streamlitgoogle-cloud-bigquery
