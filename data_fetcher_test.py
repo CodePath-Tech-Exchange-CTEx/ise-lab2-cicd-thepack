@@ -233,7 +233,8 @@ class TestGetGenaiAdvice(unittest.TestCase):
         mock_profile.return_value = {'full_name': 'Alice', 'username': 'alicej',
                                      'date_of_birth': '1990-01-15', 'profile_image': None, 'friends': []}
         mock_workouts.return_value = []
-        with patch('data_fetcher.vertexai.init'), \
+        with patch('data_fetcher.bigquery.Client'), \
+             patch('data_fetcher.vertexai.init'), \
              patch('data_fetcher.GenerativeModel') as mock_model_class:
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
@@ -245,7 +246,8 @@ class TestGetGenaiAdvice(unittest.TestCase):
         mock_profile.return_value = {'full_name': 'Alice', 'username': 'alicej',
                                      'date_of_birth': '1990-01-15', 'profile_image': None, 'friends': []}
         mock_workouts.return_value = []
-        with patch('data_fetcher.vertexai.init'), \
+        with patch('data_fetcher.bigquery.Client'), \
+             patch('data_fetcher.vertexai.init'), \
              patch('data_fetcher.GenerativeModel') as mock_model_class:
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
@@ -258,7 +260,8 @@ class TestGetGenaiAdvice(unittest.TestCase):
         mock_profile.return_value = {'full_name': 'Alice', 'username': 'alicej',
                                      'date_of_birth': '1990-01-15', 'profile_image': None, 'friends': []}
         mock_workouts.return_value = []
-        with patch('data_fetcher.vertexai.init'), \
+        with patch('data_fetcher.bigquery.Client'), \
+             patch('data_fetcher.vertexai.init'), \
              patch('data_fetcher.GenerativeModel') as mock_model_class:
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
@@ -271,7 +274,8 @@ class TestGetGenaiAdvice(unittest.TestCase):
         mock_profile.return_value = {'full_name': 'Alice', 'username': 'alicej',
                                      'date_of_birth': '1990-01-15', 'profile_image': None, 'friends': []}
         mock_workouts.return_value = []
-        with patch('data_fetcher.vertexai.init'), \
+        with patch('data_fetcher.bigquery.Client'), \
+             patch('data_fetcher.vertexai.init'), \
              patch('data_fetcher.GenerativeModel') as mock_model_class:
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
