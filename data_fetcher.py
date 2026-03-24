@@ -2,146 +2,163 @@
 # data_fetcher.py
 #
 # This file contains functions to fetch data needed for the app.
-#
-# You will re-write these functions in Unit 3, and are welcome to alter the
-# data returned in the meantime. We will replace this file with other data when
-# testing earlier units.
 #############################################################################
 
 import random
+from google.cloud import bigquery
 
-users = {
-    'user1': {
-        'full_name': 'Remi',
-        'username': 'remi_the_rems',
-        'date_of_birth': '1990-01-01',
-        'profile_image': 'https://upload.wikimedia.org/wikipedia/commons/c/c8/Puma_shoes.jpg',
-        'friends': ['user2', 'user3', 'user4'],
-    },
-    'user2': {
-        'full_name': 'Blake',
-        'username': 'blake',
-        'date_of_birth': '1990-01-01',
-        'profile_image': 'https://upload.wikimedia.org/wikipedia/commons/c/c8/Puma_shoes.jpg',
-        'friends': ['user1'],
-    },
-    'user3': {
-        'full_name': 'Jordan',
-        'username': 'jordanjordanjordan',
-        'date_of_birth': '1990-01-01',
-        'profile_image': 'https://upload.wikimedia.org/wikipedia/commons/c/c8/Puma_shoes.jpg',
-        'friends': ['user1', 'user4'],
-    },
-    'user4': {
-        'full_name': 'Gemmy',
-        'username': 'gems',
-        'date_of_birth': '1990-01-01',
-        'profile_image': 'https://upload.wikimedia.org/wikipedia/commons/c/c8/Puma_shoes.jpg',
-        'friends': ['user1', 'user3'],
-    },
-}
-
+PROJECT_ID = 'susana-rojas-fiu'
+DATASET = 'ISE'
+client = bigquery.Client(project=PROJECT_ID)
 
 def get_user_sensor_data(user_id, workout_id):
-    """Returns a list of timestampped information for a given workout.
-
-    This function currently returns random data. You will re-write it in Unit 3.
+    """Returns a list of timestamped information for a given workout."""
+    query = f"""
+        SELECT st.Name, st.Units, sd.Timestamp, sd.SensorValue
+        FROM `{PROJECT_ID}.{DATASET}.SensorData` sd
+        JOIN `{PROJECT_ID}.{DATASET}.SensorTypes` st ON sd.SensorId = st.SensorId
+        WHERE sd.WorkoutID = @workout_id
+        ORDER BY sd.Timestamp
     """
-    sensor_data = []
-    sensor_types = [
-        'accelerometer',
-        'gyroscope',
-        'pressure',
-        'temperature',
-        'heart_rate',
-    ]
-    for index in range(random.randint(5, 100)):
-        random_minute = str(random.randint(0, 59))
-        if len(random_minute) == 1:
-            random_minute = '0' + random_minute
-        timestamp = '2024-01-01 00:' + random_minute + ':00'
-        data = random.random() * 100
-        sensor_type = random.choice(sensor_types)
-        sensor_data.append(
-            {'sensor_type': sensor_type, 'timestamp': timestamp, 'data': data}
-        )
-    return sensor_data
-
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('workout_id', 'STRING', workout_id),
+        ]
+    )
+    rows = client.query(query, job_config=job_config).result()
+    return [
+        {
+            'sensor_type': row.Name,
+            'timestamp': str(row.Timestamp),
+            'data': row.SensorValue,
+            'units': row.Units,
+        }
+        for row in rows
+    ]  
 
 def get_user_workouts(user_id):
-    """Returns a list of user's workouts.
-
-    This function currently returns random data. You will re-write it in Unit 3.
+    """Returns a list of user's workouts."""
+    query = f"""
+        SELECT *
+        FROM `{PROJECT_ID}.{DATASET}.Workouts`
+        WHERE UserId = @user_id
+        ORDER BY StartTimestamp DESC
     """
-    workouts = []
-    for index in range(random.randint(1, 3)):
-        random_lat_lng_1 = (
-            1 + random.randint(0, 100) / 100,
-            4 + random.randint(0, 100) / 100,
-        )
-        random_lat_lng_2 = (
-            1 + random.randint(0, 100) / 100,
-            4 + random.randint(0, 100) / 100,
-        )
-        workouts.append({
-            'workout_id': f'workout{index}',
-            'start_timestamp': '2024-01-01 00:00:00',
-            'end_timestamp': '2024-01-01 00:30:00',
-            'start_lat_lng': random_lat_lng_1,
-            'end_lat_lng': random_lat_lng_2,
-            'distance': random.randint(0, 200) / 10.0,
-            'steps': random.randint(0, 20000),
-            'calories_burned': random.randint(0, 100),
-        })
-    return workouts
-
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('user_id', 'STRING', user_id),
+        ]
+    )
+    rows = client.query(query, job_config=job_config).result()
+    return [
+        {
+            'workout_id': row.WorkoutId,
+            'start_timestamp': str(row.StartTimestamp),
+            'end_timestamp': str(row.EndTimestamp),
+            'start_lat_lng': (row.StartLocationLat, row.StartLocationLong),
+            'end_lat_lng': (row.EndLocationLat, row.EndLocationLong),
+            'distance': row.TotalDistance,
+            'steps': row.TotalSteps,
+            'calories_burned': row.CaloriesBurned,
+        }
+        for row in rows
+    ]  
 
 def get_user_profile(user_id):
-    """Returns information about the given user.
-
-    This function currently returns random data. You will re-write it in Unit 3.
+    """Returns information about the given user."""
+    query = f"""
+        SELECT Name, Username, DateOfBirth, ImageUrl
+        FROM `{PROJECT_ID}.{DATASET}.Users`
+        WHERE UserId = @user_id
     """
-    if user_id not in users:
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('user_id', 'STRING', user_id),
+        ]
+    )
+    rows = list(client.query(query, job_config=job_config).result())
+    if not rows:
         raise ValueError(f'User {user_id} not found.')
-    return users[user_id]
+    user = rows[0]
 
+    friends_query = f"""
+        SELECT
+            CASE WHEN UserId1 = @user_id THEN UserId2 ELSE UserId1 END AS FriendId
+        FROM `{PROJECT_ID}.{DATASET}.Friends`
+        WHERE UserId1 = @user_id OR UserId2 = @user_id
+    """
+    friends_rows = client.query(friends_query, job_config=job_config).result()
+    friends = [row.FriendId for row in friends_rows]  
+
+    return {
+        'full_name': user.Name,
+        'username': user.Username,
+        'date_of_birth': str(user.DateOfBirth),
+        'profile_image': user.ImageUrl,
+        'friends': friends,
+    }  
 
 def get_user_posts(user_id):
-    """Returns a list of a user's posts.
-
-    This function currently returns random data. You will re-write it in Unit 3.
+    """Returns a list of a user's posts."""
+    query = f"""
+        SELECT PostId, AuthorId, Timestamp, ImageUrl, Content
+        FROM `{PROJECT_ID}.{DATASET}.Posts`
+        WHERE AuthorId = @user_id
+        ORDER BY Timestamp DESC
     """
-    content = random.choice([
-        'Had a great workout today!',
-        'The AI really motivated me to push myself further, I ran 10 miles!',
-    ])
-    return [{
-        'user_id': user_id,
-        'post_id': 'post1',
-        'timestamp': '2024-01-01 00:00:00',
-        'content': content,
-        'image': 'image_url',
-    }]
-
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('user_id', 'STRING', user_id),
+        ]
+    )
+    rows = client.query(query, job_config=job_config).result()
+    return [
+        {
+            'user_id': row.AuthorId,
+            'post_id': row.PostId,
+            'timestamp': str(row.Timestamp),
+            'content': row.Content,
+            'image': row.ImageUrl,
+        }
+        for row in rows
+    ] 
 
 def get_genai_advice(user_id):
-    """Returns the most recent advice from the genai model.
+    """Returns advice from Vertex AI based on the user's workout data."""
+    import vertexai
+    from vertexai.generative_models import GenerativeModel
 
-    This function currently returns random data. You will re-write it in Unit 3.
-    """
-    advice = random.choice([
-        'Your heart rate indicates you can push yourself further. You got this!',
-        "You're doing great! Keep up the good work.",
-        'You worked hard yesterday, take it easy today.',
-        'You have burned 100 calories so far today!',
-    ])
+    workouts = get_user_workouts(user_id)
+    profile = get_user_profile(user_id)
+
+    workout_summary = ''
+    if workouts:
+        latest = workouts[0]
+        workout_summary = (
+            f"Latest workout: {latest['steps']} steps, "
+            f"{latest['distance']} km, "
+            f"{latest['calories_burned']} calories burned."
+        )  
+
+    prompt = (
+        f"You are a fitness coach. Give one short encouraging tip (2-3 sentences) "
+        f"to {profile['full_name']} based on their recent activity. {workout_summary}"
+    )  # Line written by Gemini
+
+    vertexai.init(project=PROJECT_ID, location='us-central1')
+    model = GenerativeModel('gemini-1.5-flash')
+    response = model.generate_content(prompt)
+    advice_text = response.text  
+
     image = random.choice([
-        'https://plus.unsplash.com/premium_photo-1669048780129-051d670fa2d1?q=80&w=3870&auto=format&fit=crop&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+        'https://plus.unsplash.com/premium_photo-1669048780129-051d670fa2d1?q=80&w=3870&auto=format&fit=crop',
         None,
-    ])
+    ]) 
+
     return {
         'advice_id': 'advice1',
-        'timestamp': '2024-01-01 00:00:00',
-        'content': advice,
+        'timestamp': str(__import__('datetime').datetime.now()),
+        'content': advice_text,
         'image': image,
-    }
+    }  
+
