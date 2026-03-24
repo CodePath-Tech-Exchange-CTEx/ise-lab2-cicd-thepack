@@ -6,6 +6,8 @@
 
 import random
 from google.cloud import bigquery
+import vertexai
+from vertexai.generative_models import GenerativeModel
 
 PROJECT_ID = 'susana-rojas-fiu'
 DATASET = 'ISE'
@@ -129,9 +131,6 @@ def get_user_posts(user_id):
 def get_genai_advice(user_id):
     client = bigquery.Client(project=PROJECT_ID)
     """Returns advice from Vertex AI based on the user's workout data."""
-    import vertexai
-    from vertexai.generative_models import GenerativeModel
-
     workouts = get_user_workouts(user_id)
     profile = get_user_profile(user_id)
 
