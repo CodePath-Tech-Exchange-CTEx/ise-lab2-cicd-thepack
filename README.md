@@ -1,5 +1,5 @@
 # TODO: The Pack
-gcp link: https://ise-lab2-cicd-thepack-472049188960.us-central1.run.app
+gcp link: https://ise-lab2-cicd-thepack-adn6uss42a-uc.a.run.app
 
 ## Our Team
 
