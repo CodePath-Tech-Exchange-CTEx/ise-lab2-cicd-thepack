@@ -9,7 +9,7 @@ from google.cloud import bigquery
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
-PROJECT_ID = 'tesfaye-kefene-fisk'
+PROJECT_ID = 'susana-rojas-fiu'
 DATASET = 'ISE'
 
 
