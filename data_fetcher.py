@@ -5,14 +5,19 @@
 #############################################################################
 
 import random
-from google.cloud import bigquery
+import uuid
+import streamlit as st
+from datetime import datetime
+from google.cloud import bigquery, storage
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
 PROJECT_ID = 'susana-rojas-fiu'
 DATASET = 'ISE'
+GCS_BUCKET = 'susana-rojas-fiu-media'
 
 
+@st.cache_data(ttl=300)
 def get_user_sensor_data(user_id, workout_id):
     """Returns a list of timestamped information for a given workout."""
     client = bigquery.Client(project=PROJECT_ID)
@@ -42,6 +47,7 @@ def get_user_sensor_data(user_id, workout_id):
     ]
 
 
+@st.cache_data(ttl=300)
 def get_user_workouts(user_id):
     """Returns a list of user's workouts."""
     client = bigquery.Client(project=PROJECT_ID)
@@ -74,6 +80,7 @@ def get_user_workouts(user_id):
     ]
 
 
+@st.cache_data(ttl=300)
 def get_user_profile(user_id):
     """Returns information about the given user."""
     client = bigquery.Client(project=PROJECT_ID)
@@ -113,6 +120,7 @@ def get_user_profile(user_id):
     }
 
 
+@st.cache_data(ttl=300)
 def get_user_posts(user_id):
     """Returns a list of a user's posts."""
     client = bigquery.Client(project=PROJECT_ID)
@@ -122,6 +130,7 @@ def get_user_posts(user_id):
         SELECT PostId, AuthorId, Timestamp, ImageUrl, Content
         FROM `{PROJECT_ID}.{DATASET}.Posts`
         WHERE AuthorId = @user_id
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY PostId ORDER BY Timestamp) = 1
         ORDER BY Timestamp DESC
     """
     job_config = bigquery.QueryJobConfig(
@@ -142,6 +151,7 @@ def get_user_posts(user_id):
     ]
 
 
+@st.cache_data(ttl=600)
 def get_genai_advice(user_id):
     """Returns advice from Vertex AI based on the user's workout data."""
     client = bigquery.Client(project=PROJECT_ID)
@@ -178,3 +188,51 @@ def get_genai_advice(user_id):
         'content': advice_text,
         'image': image,
     }
+
+
+def upload_image_to_gcs(file_bytes, filename, content_type='image/jpeg'):
+    """Uploads an image to GCS and returns its public URL."""
+    client = storage.Client(project=PROJECT_ID)
+    bucket = client.bucket(GCS_BUCKET)
+    blob = bucket.blob(f'posts/{uuid.uuid4()}_{filename}')
+    blob.upload_from_string(file_bytes, content_type=content_type)
+    return f'https://storage.googleapis.com/{GCS_BUCKET}/{blob.name}'
+
+
+def delete_post(post_id, user_id):
+    """Deletes a post from the Posts table. Only deletes if the post belongs to the user."""
+    client = bigquery.Client(project=PROJECT_ID)
+    query = f"""
+        DELETE FROM `{PROJECT_ID}.{DATASET}.Posts`
+        WHERE PostId = @post_id AND AuthorId = @user_id
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('post_id', 'STRING', post_id),
+            bigquery.ScalarQueryParameter('user_id', 'STRING', user_id),
+        ]
+    )
+    client.query(query, job_config=job_config).result()
+    get_user_posts.clear()
+
+
+def create_post(user_id, content, image_url=None):
+    """Inserts a new post into the Posts table."""
+    client = bigquery.Client(project=PROJECT_ID)
+    post_id = str(uuid.uuid4())
+    timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    query = f"""
+        INSERT INTO `{PROJECT_ID}.{DATASET}.Posts` (PostId, AuthorId, Timestamp, ImageUrl, Content)
+        VALUES (@post_id, @user_id, @timestamp, @image_url, @content)
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter('post_id', 'STRING', post_id),
+            bigquery.ScalarQueryParameter('user_id', 'STRING', user_id),
+            bigquery.ScalarQueryParameter('timestamp', 'DATETIME', timestamp),
+            bigquery.ScalarQueryParameter('image_url', 'STRING', image_url),
+            bigquery.ScalarQueryParameter('content', 'STRING', content),
+        ]
+    )
+    client.query(query, job_config=job_config).result()
+    get_user_posts.clear()

@@ -16,11 +16,14 @@ def display_community_page(user_id):
     profile = get_user_profile(user_id)
     friends = profile['friends']
 
-    # Collect posts from all friends
+    # Collect posts from all friends, deduplicating by post_id
+    seen_post_ids = set()
     all_posts = []
     for friend_id in friends:
-        posts = get_user_posts(friend_id)
-        all_posts.extend(posts)
+        for post in get_user_posts(friend_id):
+            if post['post_id'] not in seen_post_ids:
+                seen_post_ids.add(post['post_id'])
+                all_posts.append(post)
 
     # Sort by timestamp and take the first 10
     all_posts.sort(key=lambda x: x['timestamp'])
