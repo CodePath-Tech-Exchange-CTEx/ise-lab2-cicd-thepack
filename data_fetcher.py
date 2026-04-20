@@ -4,6 +4,7 @@
 # This file contains functions to fetch data needed for the app.
 #############################################################################
 
+import os
 import random
 import uuid
 import streamlit as st
@@ -12,9 +13,19 @@ from google.cloud import bigquery, storage
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
-PROJECT_ID = st.secrets['gcp']['project_id']
-DATASET    = st.secrets['gcp']['dataset']
-GCS_BUCKET = st.secrets['gcp']['bucket']
+
+def _get_config(key, default):
+    """Read config from Streamlit secrets, falling back to env vars, then defaults.
+    This lets the app run in Streamlit, CI, and local dev without breaking."""
+    try:
+        return st.secrets['gcp'][key]
+    except Exception:
+        return os.environ.get(f'GCP_{key.upper()}', default)
+
+
+PROJECT_ID = _get_config('project_id', 'susana-rojas-fiu')
+DATASET    = _get_config('dataset', 'ISE')
+GCS_BUCKET = _get_config('bucket', 'susana-rojas-fiu-media')
 
 
 @st.cache_data(ttl=300)
