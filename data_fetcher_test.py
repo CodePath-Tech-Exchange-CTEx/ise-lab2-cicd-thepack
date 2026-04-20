@@ -132,39 +132,55 @@ class TestGetUserWorkouts(unittest.TestCase):
 
 class TestGetUserProfile(unittest.TestCase):
 
-    @patch('data_fetcher.bigquery.Client')
-    def test_returns_dict(self, mock_client_class):
+    def _setup_mock(self, mock_client_class, profile_rows, friends_rows=None):
+        """Helper: mock two sequential query calls (profile, then friends)."""
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
-        mock_client.query.return_value.result.return_value = [
+
+        profile_result = MagicMock()
+        profile_result.result.return_value = profile_rows
+
+        friends_result = MagicMock()
+        friends_result.result.return_value = friends_rows or []
+
+        mock_client.query.side_effect = [profile_result, friends_result]
+        return mock_client
+
+    @patch('data_fetcher.bigquery.Client')
+    def test_returns_dict(self, mock_client_class):
+        self._setup_mock(mock_client_class, [
             make_row(Name='Alice Johnson', Username='alicej',
                      DateOfBirth='1990-01-15', ImageUrl='http://example.com/alice.jpg')
-        ]
+        ])
         result = data_fetcher.get_user_profile('user1')
         self.assertIsInstance(result, dict)
 
     @patch('data_fetcher.bigquery.Client')
     def test_has_required_keys(self, mock_client_class):
-        mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
-        mock_client.query.return_value.result.return_value = [
+        self._setup_mock(mock_client_class, [
             make_row(Name='Alice Johnson', Username='alicej',
                      DateOfBirth='1990-01-15', ImageUrl='http://example.com/alice.jpg')
-        ]
+        ])
         result = data_fetcher.get_user_profile('user1')
         for key in ('full_name', 'username', 'date_of_birth', 'profile_image', 'friends'):
             self.assertIn(key, result)
 
     @patch('data_fetcher.bigquery.Client')
     def test_friends_is_list(self, mock_client_class):
-        mock_client = MagicMock()
-        mock_client_class.return_value = mock_client
-        mock_client.query.return_value.result.return_value = [
-            make_row(Name='Alice Johnson', Username='alicej',
-                     DateOfBirth='1990-01-15', ImageUrl='http://example.com/alice.jpg')
-        ]
+        self._setup_mock(
+            mock_client_class,
+            profile_rows=[
+                make_row(Name='Alice Johnson', Username='alicej',
+                         DateOfBirth='1990-01-15', ImageUrl='http://example.com/alice.jpg')
+            ],
+            friends_rows=[
+                make_row(FriendId='user2'),
+                make_row(FriendId='user3'),
+            ],
+        )
         result = data_fetcher.get_user_profile('user1')
         self.assertIsInstance(result['friends'], list)
+        self.assertEqual(result['friends'], ['user2', 'user3'])
 
     @patch('data_fetcher.bigquery.Client')
     def test_invalid_user_raises_error(self, mock_client_class):
@@ -280,6 +296,7 @@ class TestGetGenaiAdvice(unittest.TestCase):
             mock_model_class.return_value.generate_content.return_value.text = 'Keep it up!'
             result = data_fetcher.get_genai_advice('user1')
         self.assertTrue(result['image'] is None or isinstance(result['image'], str))
+
 
 if __name__ == '__main__':
     unittest.main()

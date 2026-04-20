@@ -142,7 +142,7 @@ def _render_goal_setup():
 
 
 # ── Progress context builder ──────────────────────────────────────────────────
-
+# this function is written by claude ai
 def _build_progress_context(user_id: str) -> dict:
     """Aggregates BigQuery + Apple Health data into a progress summary dict."""
     # BigQuery workouts
@@ -301,6 +301,7 @@ def _render_exercise_suggestions(user_id: str, goals: dict, progress: dict):
     if not plan:
         st.warning('Could not generate a plan right now. Try a different focus area.')
         return
+    # this part is written by claude ai
 
     for i, ex in enumerate(plan):
         with st.container(border=True):
@@ -327,7 +328,7 @@ def _render_exercise_suggestions(user_id: str, goals: dict, progress: dict):
                     for step, instruction in enumerate(ex.get('instructions', []), 1):
                         st.write(f'{step}. {instruction}')
 
-
+    #until here
 @st.cache_data(ttl=3600, show_spinner=False)
 def _get_ai_exercise_plan(user_id: str, goals: dict, progress: dict, focus: str) -> list:
     """Generates an AI exercise plan enriched with goal & progress context."""
@@ -397,7 +398,7 @@ Exercise list:
         selected = _json.loads(raw)
     except Exception:
         return []
-
+    # this part is written by claude ai
     exercise_map = {ex['id']: ex for ex in candidates}
     plan = []
     for item in selected:
@@ -416,7 +417,7 @@ Exercise list:
             'reps': item['reps'],
             'tip': item.get('tip', ''),
         })
-
+        #until here
     return plan
 
 
@@ -454,6 +455,7 @@ def load_goals_from_supabase():
         res = client.table('user_goals').select('*').eq('user_id', uid).limit(1).execute()
         if res.data:
             row = res.data[0]
+            # this part is written by claude ai
             st.session_state['user_goals'] = {
                 'primary_goal': row.get('primary_goal', 'General Fitness'),
                 'experience': row.get('experience', 'Beginner'),
