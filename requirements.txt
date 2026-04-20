@@ -2,3 +2,6 @@ streamlit
 google-cloud-bigquery
 google-cloud-aiplatform
 google-cloud-storage
+requests
+supabase
+pandas
