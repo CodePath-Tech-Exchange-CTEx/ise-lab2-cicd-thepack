@@ -12,9 +12,9 @@ from google.cloud import bigquery, storage
 import vertexai
 from vertexai.generative_models import GenerativeModel
 
-PROJECT_ID = 'susana-rojas-fiu'
-DATASET = 'ISE'
-GCS_BUCKET = 'susana-rojas-fiu-media'
+PROJECT_ID = st.secrets['gcp']['project_id']
+DATASET    = st.secrets['gcp']['dataset']
+GCS_BUCKET = st.secrets['gcp']['bucket']
 
 
 @st.cache_data(ttl=300)
