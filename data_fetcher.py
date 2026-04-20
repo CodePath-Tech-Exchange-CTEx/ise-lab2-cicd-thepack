@@ -190,6 +190,101 @@ def get_genai_advice(user_id):
     }
 
 
+FREE_EXERCISE_DB_URL = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json'
+FREE_EXERCISE_IMG_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises'
+
+FOCUS_TO_MUSCLES = {
+    'Chest': ['chest'],
+    'Back': ['lats', 'middle back', 'lower back', 'traps'],
+    'Legs': ['quadriceps', 'hamstrings', 'glutes', 'calves'],
+    'Shoulders': ['shoulders', 'traps'],
+    'Arms': ['biceps', 'triceps', 'forearms'],
+    'Core': ['abdominals'],
+}
+
+
+@st.cache_data(ttl=86400)
+def get_all_exercises():
+    """Fetches the full exercise list from the free-exercise-db on GitHub."""
+    import requests
+    resp = requests.get(FREE_EXERCISE_DB_URL, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+@st.cache_data(ttl=3600)
+def get_workout_plan(user_id, focus):
+    """Filters exercises by muscle group, asks Gemini to build a structured plan,
+    then returns the selected exercises with image URLs."""
+    import json
+
+    all_exercises = get_all_exercises()
+    target_muscles = FOCUS_TO_MUSCLES.get(focus, [focus.lower()])
+
+    # Filter to exercises that target the right muscles and have images
+    candidates = [
+        ex for ex in all_exercises
+        if any(m in ex.get('primaryMuscles', []) for m in target_muscles)
+        and ex.get('images')
+    ]
+
+    # Build compact list for Gemini
+    exercise_list = [
+        {
+            'id': ex['id'],
+            'name': ex['name'],
+            'primaryMuscles': ex['primaryMuscles'],
+            'equipment': ex.get('equipment', 'body only'),
+            'level': ex.get('level', 'intermediate'),
+        }
+        for ex in candidates
+    ]
+
+    profile = get_user_profile(user_id)
+
+    prompt = (
+        f"You are a personal trainer building a {focus} day workout for {profile['full_name']}. "
+        f"Choose 5 to 6 exercises from this list that form a balanced, effective workout. "
+        f"Vary the equipment and muscle emphasis where possible. "
+        f"Return ONLY a valid JSON array. Each item must have these exact keys: "
+        f"\"id\" (exercise id from the list), "
+        f"\"sets\" (integer), "
+        f"\"reps\" (string e.g. \"8-12\" or \"15\"), "
+        f"\"tip\" (one short form cue, max 15 words). "
+        f"No markdown, no explanation, just the JSON array.\n\n"
+        f"Exercise list:\n{json.dumps(exercise_list)}"
+    )
+
+    vertexai.init(project=PROJECT_ID, location='us-central1')
+    model = GenerativeModel('gemini-2.5-flash-lite')
+    response = model.generate_content(prompt)
+
+    raw = response.text.strip().removeprefix('```json').removeprefix('```').removesuffix('```').strip()
+    selected = json.loads(raw)
+
+    exercise_map = {ex['id']: ex for ex in candidates}
+    plan = []
+    for item in selected:
+        ex = exercise_map.get(item['id'])
+        if not ex:
+            continue
+        plan.append({
+            'name': ex['name'],
+            'primaryMuscles': ex.get('primaryMuscles', []),
+            'secondaryMuscles': ex.get('secondaryMuscles', []),
+            'equipment': ex.get('equipment', 'body only'),
+            'level': ex.get('level', ''),
+            'mechanic': ex.get('mechanic', ''),
+            'instructions': ex.get('instructions', []),
+            'imageUrl': f"{FREE_EXERCISE_IMG_BASE}/{ex['images'][0]}",
+            'sets': item['sets'],
+            'reps': item['reps'],
+            'tip': item['tip'],
+        })
+
+    return plan
+
+
 def upload_image_to_gcs(file_bytes, filename, content_type='image/jpeg'):
     """Uploads an image to GCS and returns its public URL."""
     client = storage.Client(project=PROJECT_ID)
