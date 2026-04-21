@@ -286,10 +286,11 @@ def _render_personal_records(bq_workouts, daily_steps_ah: dict):
     for i, (label, value) in enumerate(records.items()):
         with cols[i % 3]:
             st.markdown(
-                f'<div style="background:#F9FAFB;border-left:3px solid #111827;'
-                f'border-radius:8px;padding:14px 16px;margin-bottom:12px">'
-                f'<div style="font-size:0.75rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.8px">{label}</div>'
-                f'<div style="font-size:1.3rem;font-weight:700;color:#111827;margin-top:4px">{value}</div>'
+                f'<div style="background:#FFFFFF;border:1.5px solid #D4D4D4;border-left:4px solid #FF4500;'
+                f'border-radius:10px;padding:14px 16px;margin-bottom:12px">'
+                f'<div style="font-size:0.72rem;color:#555555;text-transform:uppercase;'
+                f'letter-spacing:1px;font-weight:700">{label}</div>'
+                f'<div style="font-size:1.35rem;font-weight:900;color:#0A0A0A;margin-top:5px">{value}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
@@ -347,10 +348,12 @@ def _progress_label(pct: float):
 
 def _metric_card(label, value):
     return (
-        f'<div style="background:#fff;border:1px solid #E8E8ED;border-radius:12px;'
-        f'padding:20px 16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:10px">'
-        f'<div style="font-size:1.7rem;font-weight:700;color:#111827;letter-spacing:-0.5px">{value}</div>'
-        f'<div style="font-size:0.72rem;color:#6B7280;text-transform:uppercase;letter-spacing:1.2px;margin-top:4px">{label}</div>'
+        f'<div style="background:#FFFFFF;border:1.5px solid #D4D4D4;border-top:4px solid #FF4500;'
+        f'border-radius:12px;padding:20px 16px;text-align:center;'
+        f'box-shadow:0 1px 5px rgba(0,0,0,.09);margin-bottom:10px">'
+        f'<div style="font-size:1.75rem;font-weight:900;color:#0A0A0A;letter-spacing:-0.5px">{value}</div>'
+        f'<div style="font-size:0.72rem;color:#555555;text-transform:uppercase;'
+        f'letter-spacing:1.3px;font-weight:700;margin-top:5px">{label}</div>'
         f'</div>'
     )
 
@@ -358,7 +361,6 @@ def _metric_card(label, value):
 def _inject_css():
     st.markdown("""
         <style>
-        [data-testid="stMetric"] { background:#F9FAFB; border-radius:12px; padding:12px; }
-        [data-testid="stProgress"] > div > div { background-color: #111827 !important; }
+        [data-testid="stProgress"] > div > div { background: #FF4500 !important; }
         </style>
     """, unsafe_allow_html=True)

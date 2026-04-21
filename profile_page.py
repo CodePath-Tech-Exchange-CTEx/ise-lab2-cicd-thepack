@@ -198,10 +198,10 @@ def display_profile_page(user_id: str):
         for i, badge in enumerate(unlocked):
             with cols[i % 4]:
                 st.markdown(
-                    f'<div style="background:#F9FAFB;border:1px solid #111827;border-radius:12px;'
+                    f'<div style="background:#FFFFFF;border:2px solid #0A0A0A;border-radius:12px;'
                     f'padding:14px;text-align:center;margin-bottom:10px">'
-                    f'<div style="font-weight:700;font-size:0.88rem;color:#111827;margin-bottom:4px">{badge["name"]}</div>'
-                    f'<div style="font-size:0.7rem;color:#6B7280">{badge["desc"]}</div>'
+                    f'<div style="font-weight:800;font-size:0.88rem;color:#0A0A0A;margin-bottom:4px">{badge["name"]}</div>'
+                    f'<div style="font-size:0.7rem;color:#555555;font-weight:500">{badge["desc"]}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -211,10 +211,10 @@ def display_profile_page(user_id: str):
         for i, badge in enumerate(locked):
             with cols2[i % 4]:
                 st.markdown(
-                    f'<div style="background:#F9FAFB;border:1px dashed #D1D5DB;border-radius:12px;'
-                    f'padding:14px;text-align:center;margin-bottom:10px;opacity:.55">'
-                    f'<div style="font-weight:600;font-size:0.85rem;color:#9CA3AF;margin-bottom:4px">{badge["name"]}</div>'
-                    f'<div style="font-size:0.7rem;color:#D1D5DB">{badge["desc"]}</div>'
+                    f'<div style="background:#F2F2F2;border:1.5px dashed #BBBBBB;border-radius:12px;'
+                    f'padding:14px;text-align:center;margin-bottom:10px;opacity:.6">'
+                    f'<div style="font-weight:700;font-size:0.85rem;color:#666666;margin-bottom:4px">{badge["name"]}</div>'
+                    f'<div style="font-size:0.7rem;color:#888888">{badge["desc"]}</div>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -250,7 +250,6 @@ def display_profile_page(user_id: str):
 def _inject_css():
     st.markdown("""
         <style>
-        [data-testid="stMetric"] { background:#F9FAFB; border-radius:12px; padding:12px; }
-        [data-testid="stProgress"] > div > div { background-color: #111827 !important; }
+        [data-testid="stProgress"] > div > div { background: #FF4500 !important; }
         </style>
     """, unsafe_allow_html=True)
