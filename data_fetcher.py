@@ -22,7 +22,7 @@ def _get_config(key, default):
     except Exception:
         return os.environ.get(f'GCP_{key.upper()}', default)
 
-
+#this is the change
 PROJECT_ID = _get_config('project_id', 'susana-rojas-fiu')
 DATASET    = _get_config('dataset', 'ISE')
 GCS_BUCKET = _get_config('bucket', 'susana-rojas-fiu-media')
