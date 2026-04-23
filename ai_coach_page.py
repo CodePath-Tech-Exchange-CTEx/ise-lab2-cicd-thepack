@@ -134,8 +134,17 @@ def _render_goal_setup():
                 'updated_at': datetime.utcnow().isoformat(),
             }
             st.session_state['user_goals'] = goals
-            _persist_goals_to_supabase(goals)
-            st.success('Goals saved!')
+            persisted, err = _persist_goals_to_supabase(goals)
+            if persisted:
+                st.success('Goals saved to your account.')
+            else:
+                st.warning(
+                    'Goals saved for this session only — they will be lost on sign-out. '
+                    f'(Reason: {err})\n\n'
+                    '**Fix:** open your Supabase project → SQL Editor → paste the '
+                    'contents of `supabase_setup.sql` and hit Run. Then sign out and '
+                    'back in.'
+                )
             st.rerun()
 
     return st.session_state.get('user_goals')
@@ -424,25 +433,56 @@ Exercise list:
 # ── Supabase persistence (optional, non-blocking) ─────────────────────────────
 
 def _persist_goals_to_supabase(goals: dict):
-    """Saves goals to Supabase user_goals table. Silently skips if table doesn't exist."""
+    """Saves goals to Supabase user_goals table.
+    Returns (success: bool, error_message: str). The error message is
+    surfaced in the UI so the user knows *why* their profile didn't save
+    (usually: supabase_setup.sql was never run → table missing)."""
     try:
         from supabase_client import get_supabase_client
         from auth_page import get_current_user_id
         uid = get_current_user_id()
         if not uid:
-            return
+            return False, 'Not signed in.'
+
         client = get_supabase_client()
-        client.table('user_goals').upsert({
+
+        # Make sure the cached client has the active user's access token.
+        # Without this, RLS rejects the upsert because auth.uid() is null.
+        sess = st.session_state.get('supabase_session')
+        if sess is not None:
+            try:
+                access = getattr(sess, 'access_token', None) or sess.get('access_token')
+                refresh = getattr(sess, 'refresh_token', None) or sess.get('refresh_token')
+                if access and refresh:
+                    client.auth.set_session(access, refresh)
+            except Exception:
+                pass
+
+        payload = {
             'user_id': uid,
-            **{k: str(v) if not isinstance(v, (str, int, float, bool)) else v
-               for k, v in goals.items()},
-        }).execute()
-    except Exception:
-        pass  # Silently skip if Supabase table doesn't exist yet
+            'primary_goal': goals['primary_goal'],
+            'experience': goals['experience'],
+            'focus_area': goals['focus_area'],
+            'weekly_workouts': int(goals['weekly_workouts']),
+            'daily_steps_goal': int(goals['daily_steps_goal']),
+            'notes': goals.get('notes', '') or '',
+            # Let Postgres default `now()` fill updated_at; don't pass a string
+        }
+        client.table('user_goals').upsert(payload, on_conflict='user_id').execute()
+        return True, ''
+    except Exception as e:
+        msg = str(e)
+        if 'user_goals' in msg and ('does not exist' in msg or 'not find' in msg):
+            return False, 'the user_goals table does not exist in Supabase yet'
+        if 'row-level security' in msg.lower() or 'permission denied' in msg.lower():
+            return False, 'row-level security blocked the write (session not applied)'
+        return False, msg[:200]
 
 
 def load_goals_from_supabase():
-    """Loads saved goals from Supabase into session state. Called on page load."""
+    """Loads saved goals from Supabase into session state. Called on page load.
+    Silent failure is OK here — if there are no goals yet, the user will
+    simply see the empty goal form."""
     if st.session_state.get('user_goals'):
         return  # already loaded
     try:
@@ -452,18 +492,28 @@ def load_goals_from_supabase():
         if not uid:
             return
         client = get_supabase_client()
+
+        sess = st.session_state.get('supabase_session')
+        if sess is not None:
+            try:
+                access = getattr(sess, 'access_token', None) or sess.get('access_token')
+                refresh = getattr(sess, 'refresh_token', None) or sess.get('refresh_token')
+                if access and refresh:
+                    client.auth.set_session(access, refresh)
+            except Exception:
+                pass
+
         res = client.table('user_goals').select('*').eq('user_id', uid).limit(1).execute()
         if res.data:
             row = res.data[0]
-            # this part is written by claude ai
             st.session_state['user_goals'] = {
                 'primary_goal': row.get('primary_goal', 'General Fitness'),
                 'experience': row.get('experience', 'Beginner'),
                 'focus_area': row.get('focus_area', 'Full Body'),
                 'weekly_workouts': int(row.get('weekly_workouts', 3)),
                 'daily_steps_goal': int(row.get('daily_steps_goal', 8000)),
-                'notes': row.get('notes', ''),
-                'updated_at': row.get('updated_at', ''),
+                'notes': row.get('notes', '') or '',
+                'updated_at': str(row.get('updated_at', '')),
             }
     except Exception:
-        pass  # Silently skip
+        pass  # Silently skip — user will just see an empty goal form

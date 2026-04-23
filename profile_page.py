@@ -230,9 +230,25 @@ def display_profile_page(user_id: str):
             try:
                 from supabase_client import get_supabase_client
                 client = get_supabase_client()
+
+                # Attach the active user session to the cached client.
+                # Without this, update_user runs as an anonymous user and
+                # the metadata change is silently dropped.
+                sess = st.session_state.get('supabase_session')
+                if sess is not None:
+                    access = getattr(sess, 'access_token', None) or (
+                        sess.get('access_token') if isinstance(sess, dict) else None
+                    )
+                    refresh = getattr(sess, 'refresh_token', None) or (
+                        sess.get('refresh_token') if isinstance(sess, dict) else None
+                    )
+                    if access and refresh:
+                        client.auth.set_session(access, refresh)
+
                 client.auth.update_user({'data': {'display_name': new_name}})
                 if st.session_state.get('supabase_user'):
-                    st.session_state['supabase_user']['user_metadata']['display_name'] = new_name
+                    meta = st.session_state['supabase_user'].setdefault('user_metadata', {})
+                    meta['display_name'] = new_name
                 st.success('Name updated.')
                 st.rerun()
             except Exception as e:

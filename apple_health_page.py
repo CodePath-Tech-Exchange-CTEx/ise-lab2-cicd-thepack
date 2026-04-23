@@ -7,19 +7,23 @@
 #   1. User exports their Apple Health data from the iPhone Health app:
 #      Health → Profile picture → Export All Health Data → share the ZIP
 #   2. They upload either the full ZIP or the extracted export.xml here.
-#   3. We parse the XML and display steps, workouts, heart-rate, calories.
+#   3. We STREAM-parse the XML so we don't load multi-GB files into memory.
 #   4. Parsed data is stored in st.session_state['apple_health'] so other
-#      pages (AI Coach) can read it without re-parsing.
+#      pages (AI Coach) can read it without re-parsing. The summary is also
+#      cached to a user-specific pickle on disk so a process restart
+#      doesn't force a re-upload.
 #
-# Supported record types:
-#   HKQuantityTypeIdentifierStepCount
-#   HKQuantityTypeIdentifierDistanceWalkingRunning
-#   HKQuantityTypeIdentifierActiveEnergyBurned
-#   HKQuantityTypeIdentifierHeartRate
-#   HKWorkoutActivityType* (workouts)
+# Why streaming: Apple Health exports for long-term users are often
+# 500MB – 2GB of XML. ET.fromstring() would load the full tree, blow past
+# the Streamlit process memory limit, and the process would restart —
+# which wipes session_state and kicks the user back to the sign-in page
+# (what the user saw as "it logs me out").
 #############################################################################
 
 import io
+import os
+import pickle
+import tempfile
 import zipfile
 import xml.etree.ElementTree as ET
 from collections import defaultdict
@@ -27,6 +31,13 @@ from datetime import datetime, timedelta
 
 import streamlit as st
 import pandas as pd
+
+
+# Cap heart-rate sample count we retain — we only need the average anyway.
+_MAX_HR_SAMPLES_RETAINED = 50_000
+
+# Where we pickle parsed summaries so a process restart doesn't lose them.
+_CACHE_DIR = os.path.join(tempfile.gettempdir(), 'lykos_apple_health_cache')
 
 
 # ── Public entry point ────────────────────────────────────────────────────────
@@ -37,28 +48,304 @@ def display_apple_health_page():
 
     _how_to_export_guide()
 
+    # Try to restore previously-parsed summary from disk (survives process restart)
+    _restore_cached_summary_if_missing()
+
     uploaded = st.file_uploader(
         'Upload your Apple Health export',
         type=['zip', 'xml'],
-        help='Export from iPhone: Health app → profile icon → Export All Health Data',
+        help='Export from iPhone: Health app → profile icon → Export All Health Data. '
+             'ZIPs up to ~2GB are supported.',
     )
 
-    if uploaded is None:
+    if uploaded is not None:
+        data = _safe_parse_upload(uploaded)
+        if data is not None:
+            st.session_state['apple_health'] = data
+            _cache_summary_to_disk(data)
+            st.success(
+                f'✅ Loaded {len(data["workouts"])} workouts and '
+                f'{data["total_steps"]:,.0f} steps from Apple Health'
+            )
+
+    # Render dashboard from whatever we have (just-uploaded OR previously cached)
+    data = st.session_state.get('apple_health')
+    if not data:
         _show_placeholder_state()
         return
 
-    with st.spinner('Parsing health data…'):
-        data = _parse_upload(uploaded)
-
-    if data is None:
-        st.error('Could not read the file. Make sure you upload export.xml or the Apple Health ZIP.')
-        return
-
-    # Cache in session state so AI Coach can access it
-    st.session_state['apple_health'] = data
-    st.success(f'✅ Loaded {len(data["workouts"])} workouts and {data["total_steps"]:,} steps from Apple Health')
+    if st.button('Clear Apple Health data', type='secondary'):
+        st.session_state.pop('apple_health', None)
+        _clear_cached_summary()
+        st.rerun()
 
     _render_dashboard(data)
+
+
+# ── Safe parse wrapper (the whole point of this refactor) ─────────────────────
+
+def _safe_parse_upload(uploaded_file):
+    """Stream-parses the upload. Catches OOM and other fatal errors so the
+    Streamlit process never dies (which is what was logging users out)."""
+    try:
+        with st.spinner('Parsing health data… this can take a minute for large exports.'):
+            return _parse_upload_streaming(uploaded_file)
+    except MemoryError:
+        st.error(
+            '⚠️ Your export is too large to parse in memory on this server. '
+            'Try exporting a shorter date range from the Health app, or run the app '
+            'locally with more RAM.'
+        )
+        return None
+    except zipfile.BadZipFile:
+        st.error('The file is not a valid Apple Health ZIP. Did you upload the correct export?')
+        return None
+    except ET.ParseError as e:
+        st.error(f'Could not parse the Apple Health XML: {e}')
+        return None
+    except Exception as e:
+        st.error(f'Unexpected error while parsing the upload: {e}')
+        return None
+
+
+# ── Streaming parser ──────────────────────────────────────────────────────────
+
+def _parse_upload_streaming(uploaded_file):
+    """Stream-parses a ZIP or XML Apple Health export without loading the
+    whole file into memory."""
+
+    name = (uploaded_file.name or '').lower()
+
+    # Spool the upload to a tmp file so we can stream from disk instead of
+    # holding the whole bytes object in memory.
+    with tempfile.NamedTemporaryFile(delete=False, suffix='_apple_health') as tmp:
+        tmp_path = tmp.name
+        # Copy in 4MB chunks
+        while True:
+            chunk = uploaded_file.read(4 * 1024 * 1024)
+            if not chunk:
+                break
+            tmp.write(chunk)
+
+    try:
+        if name.endswith('.zip'):
+            return _parse_zip_streaming(tmp_path)
+        if name.endswith('.xml'):
+            with open(tmp_path, 'rb') as f:
+                return _parse_xml_stream(f)
+        st.error('Unsupported file type. Upload a .zip or .xml export.')
+        return None
+    finally:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+
+
+def _parse_zip_streaming(zip_path: str):
+    """Open export.xml inside the ZIP as a stream and parse without
+    decompressing to memory."""
+    with zipfile.ZipFile(zip_path) as zf:
+        # Apple Health zips store the XML at 'apple_health_export/export.xml'
+        target = None
+        for info in zf.infolist():
+            if info.filename.endswith('export.xml'):
+                target = info
+                break
+        if target is None:
+            st.error(
+                'Could not find export.xml inside the ZIP. '
+                'Make sure you uploaded the unmodified Apple Health export.'
+            )
+            return None
+
+        with zf.open(target, 'r') as xml_stream:
+            return _parse_xml_stream(xml_stream)
+
+
+def _parse_xml_stream(xml_stream) -> dict:
+    """Uses ET.iterparse() so we only hold one element in memory at a time.
+    Frees each element as soon as we've consumed it."""
+
+    daily_steps = defaultdict(float)
+    daily_calories = defaultdict(float)
+    daily_distance = defaultdict(float)
+    hr_sum = 0.0
+    hr_count = 0
+    hr_samples_by_day = defaultdict(list)
+    workouts = []
+
+    # Use 'end' events so we only touch fully-formed elements.
+    context = ET.iterparse(xml_stream, events=('end',))
+    for _, elem in context:
+        tag = elem.tag
+        if tag == 'Record':
+            _process_record(elem, daily_steps, daily_calories, daily_distance,
+                            hr_samples_by_day)
+            # Update HR aggregate
+            if elem.get('type') == 'HKQuantityTypeIdentifierHeartRate':
+                try:
+                    v = float(elem.get('value', 0))
+                    hr_sum += v
+                    hr_count += 1
+                except (ValueError, TypeError):
+                    pass
+            # CRITICAL: release memory
+            elem.clear()
+        elif tag == 'Workout':
+            w = _process_workout(elem)
+            if w is not None:
+                workouts.append(w)
+            elem.clear()
+        else:
+            # Keep generic elements small — clear anything we don't need
+            if tag not in ('HealthData',):
+                elem.clear()
+
+    workouts.sort(key=lambda w: w['start'], reverse=True)
+
+    # Cap the daily HR sample lists to avoid huge memory for chart rendering
+    trimmed_hr = {}
+    for day, samples in hr_samples_by_day.items():
+        trimmed_hr[day] = samples[:200]  # keep at most 200 samples per day
+
+    avg_hr = (hr_sum / hr_count) if hr_count else 0.0
+
+    return {
+        'workouts': workouts,
+        'daily_steps': dict(daily_steps),
+        'daily_calories': dict(daily_calories),
+        'daily_distance': dict(daily_distance),
+        'daily_hr_samples': trimmed_hr,
+        'total_steps': sum(daily_steps.values()),
+        'total_calories': sum(daily_calories.values()),
+        'total_distance_km': sum(daily_distance.values()),
+        'avg_heart_rate': avg_hr,
+        # Backwards-compat key for code that reads heart_rate_readings
+        'heart_rate_readings': [],
+        'parsed_at': datetime.utcnow().isoformat(),
+    }
+
+
+def _process_record(elem, daily_steps, daily_calories, daily_distance,
+                    hr_samples_by_day):
+    rtype = elem.get('type', '')
+    start = (elem.get('startDate', '') or '')[:10]  # YYYY-MM-DD
+    if not start:
+        return
+    try:
+        value = float(elem.get('value', 0))
+    except (ValueError, TypeError):
+        return
+
+    if rtype == 'HKQuantityTypeIdentifierStepCount':
+        daily_steps[start] += value
+    elif rtype == 'HKQuantityTypeIdentifierDistanceWalkingRunning':
+        daily_distance[start] += value
+    elif rtype == 'HKQuantityTypeIdentifierActiveEnergyBurned':
+        daily_calories[start] += value
+    elif rtype == 'HKQuantityTypeIdentifierHeartRate':
+        # Retain a bounded sample per day so the UI can chart HR
+        samples = hr_samples_by_day[start]
+        if len(samples) < 200:
+            samples.append(value)
+        # Cap total memory
+        if len(hr_samples_by_day) > _MAX_HR_SAMPLES_RETAINED:
+            return
+
+
+WORKOUT_TYPE_LABELS = {
+    'HKWorkoutActivityTypeRunning': '🏃 Running',
+    'HKWorkoutActivityTypeWalking': '🚶 Walking',
+    'HKWorkoutActivityTypeCycling': '🚴 Cycling',
+    'HKWorkoutActivityTypeSwimming': '🏊 Swimming',
+    'HKWorkoutActivityTypeHighIntensityIntervalTraining': '⚡ HIIT',
+    'HKWorkoutActivityTypeFunctionalStrengthTraining': '💪 Strength',
+    'HKWorkoutActivityTypeYoga': '🧘 Yoga',
+    'HKWorkoutActivityTypeElliptical': '🏋️ Elliptical',
+    'HKWorkoutActivityTypeStairClimbing': '🪜 Stair Climbing',
+}
+
+
+def _process_workout(elem):
+    activity = elem.get('workoutActivityType', 'HKWorkoutActivityTypeOther')
+    label = WORKOUT_TYPE_LABELS.get(
+        activity,
+        '🏅 ' + activity.replace('HKWorkoutActivityType', ''),
+    )
+    start_str = elem.get('startDate', '') or ''
+    end_str = elem.get('endDate', '') or ''
+    try:
+        duration_min = float(elem.get('duration', 0) or 0)
+    except (ValueError, TypeError):
+        duration_min = 0.0
+    unit = elem.get('durationUnit', 'min')
+    if unit == 's':
+        duration_min /= 60.0
+
+    stats = {}
+    for ws in elem.findall('WorkoutStatistics'):
+        ws_type = ws.get('type', '')
+        raw = ws.get('sum') or ws.get('average') or 0
+        try:
+            stats[ws_type] = float(raw or 0)
+        except (ValueError, TypeError):
+            pass
+
+    return {
+        'type': label,
+        'date': start_str[:10],
+        'start': start_str,
+        'end': end_str,
+        'duration_min': round(duration_min, 1),
+        'calories': stats.get('HKQuantityTypeIdentifierActiveEnergyBurned', 0),
+        'distance_km': stats.get('HKQuantityTypeIdentifierDistanceWalkingRunning', 0),
+        'steps': stats.get('HKQuantityTypeIdentifierStepCount', 0),
+        'avg_hr': stats.get('HKQuantityTypeIdentifierHeartRate', 0),
+    }
+
+
+# ── On-disk cache (survives process restart) ──────────────────────────────────
+
+def _cache_path_for_user() -> str:
+    os.makedirs(_CACHE_DIR, exist_ok=True)
+    uid = _current_uid()
+    return os.path.join(_CACHE_DIR, f'{uid}.pkl')
+
+
+def _current_uid() -> str:
+    user = st.session_state.get('supabase_user') or {}
+    return user.get('id') or 'anonymous'
+
+
+def _cache_summary_to_disk(data: dict):
+    """Persist parsed summary so a process restart keeps the data."""
+    try:
+        with open(_cache_path_for_user(), 'wb') as f:
+            pickle.dump(data, f)
+    except Exception:
+        pass  # Non-fatal
+
+
+def _restore_cached_summary_if_missing():
+    if st.session_state.get('apple_health'):
+        return
+    try:
+        path = _cache_path_for_user()
+        if os.path.exists(path):
+            with open(path, 'rb') as f:
+                st.session_state['apple_health'] = pickle.load(f)
+    except Exception:
+        pass
+
+
+def _clear_cached_summary():
+    try:
+        path = _cache_path_for_user()
+        if os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
 
 
 # ── Export guide ──────────────────────────────────────────────────────────────
@@ -75,6 +362,9 @@ def _how_to_export_guide():
 5. Share or save the **export.zip** file — then upload it here
 
 You can also extract the zip and upload just the **export.xml** file.
+
+**Note:** Large exports (5+ years of data) can take 30–60 seconds to parse.
+If the page shows a spinner, leave it — it's working.
         """)
 
 
@@ -88,142 +378,6 @@ def _show_placeholder_state():
     st.info('Upload your Apple Health export above to see your real fitness data.')
 
 
-# ── Parsing ───────────────────────────────────────────────────────────────────
-
-def _parse_upload(uploaded_file):
-    """Accepts a ZIP or XML file and returns a parsed health data dict."""
-    name = uploaded_file.name.lower()
-    raw = uploaded_file.read()
-
-    if name.endswith('.zip'):
-        xml_bytes = _extract_xml_from_zip(raw)
-        if xml_bytes is None:
-            return None
-    elif name.endswith('.xml'):
-        xml_bytes = raw
-    else:
-        return None
-
-    return _parse_health_xml(xml_bytes)
-
-
-def _extract_xml_from_zip(zip_bytes: bytes):
-    """Extracts export.xml from the Apple Health ZIP archive."""
-    try:
-        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-            for name in zf.namelist():
-                if name.endswith('export.xml'):
-                    return zf.read(name)
-    except Exception:
-        pass
-    return None
-
-
-# ── XML parser ────────────────────────────────────────────────────────────────
-
-RECORD_TYPES = {
-    'HKQuantityTypeIdentifierStepCount': 'steps',
-    'HKQuantityTypeIdentifierDistanceWalkingRunning': 'distance_km',
-    'HKQuantityTypeIdentifierActiveEnergyBurned': 'calories',
-    'HKQuantityTypeIdentifierHeartRate': 'heart_rate',
-}
-
-WORKOUT_TYPE_LABELS = {
-    'HKWorkoutActivityTypeRunning': '🏃 Running',
-    'HKWorkoutActivityTypeWalking': '🚶 Walking',
-    'HKWorkoutActivityTypeCycling': '🚴 Cycling',
-    'HKWorkoutActivityTypeSwimming': '🏊 Swimming',
-    'HKWorkoutActivityTypeHighIntensityIntervalTraining': '⚡ HIIT',
-    'HKWorkoutActivityTypeFunctionalStrengthTraining': '💪 Strength',
-    'HKWorkoutActivityTypeYoga': '🧘 Yoga',
-    'HKWorkoutActivityTypeElliptical': '🏋️ Elliptical',
-    'HKWorkoutActivityTypeStairClimbing': '🪜 Stair Climbing',
-}
-
-
-def _parse_health_xml(xml_bytes: bytes) -> dict:
-    """Parses Apple Health export.xml and returns structured data."""
-    tree = ET.fromstring(xml_bytes)
-
-    # Daily aggregates
-    daily_steps = defaultdict(float)
-    daily_calories = defaultdict(float)
-    daily_distance = defaultdict(float)
-    heart_rate_readings = []
-
-    for record in tree.findall('Record'):
-        rtype = record.get('type', '')
-        start = record.get('startDate', '')[:10]  # YYYY-MM-DD
-        try:
-            value = float(record.get('value', 0))
-        except ValueError:
-            continue
-
-        if rtype == 'HKQuantityTypeIdentifierStepCount':
-            daily_steps[start] += value
-        elif rtype == 'HKQuantityTypeIdentifierDistanceWalkingRunning':
-            daily_distance[start] += value
-        elif rtype == 'HKQuantityTypeIdentifierActiveEnergyBurned':
-            daily_calories[start] += value
-        elif rtype == 'HKQuantityTypeIdentifierHeartRate':
-            heart_rate_readings.append({'date': start, 'bpm': value})
-
-    # Workouts
-    workouts = []
-    for wo in tree.findall('Workout'):
-        activity = wo.get('workoutActivityType', 'HKWorkoutActivityTypeOther')
-        label = WORKOUT_TYPE_LABELS.get(activity, '🏅 ' + activity.replace('HKWorkoutActivityType', ''))
-        start_str = wo.get('startDate', '')
-        end_str = wo.get('endDate', '')
-        duration_min = float(wo.get('duration', 0))
-        unit = wo.get('durationUnit', 'min')
-        if unit == 's':
-            duration_min /= 60.0
-
-        # Pull workout statistics sub-elements
-        stats = {}
-        for ws in wo.findall('WorkoutStatistics'):
-            ws_type = ws.get('type', '')
-            try:
-                stats[ws_type] = float(ws.get('sum', 0) or ws.get('average', 0) or 0)
-            except ValueError:
-                pass
-
-        workouts.append({
-            'type': label,
-            'date': start_str[:10],
-            'start': start_str,
-            'end': end_str,
-            'duration_min': round(duration_min, 1),
-            'calories': stats.get('HKQuantityTypeIdentifierActiveEnergyBurned', 0),
-            'distance_km': stats.get('HKQuantityTypeIdentifierDistanceWalkingRunning', 0),
-            'steps': stats.get('HKQuantityTypeIdentifierStepCount', 0),
-            'avg_hr': stats.get('HKQuantityTypeIdentifierHeartRate', 0),
-        })
-
-    workouts.sort(key=lambda w: w['start'], reverse=True)
-
-    total_steps = sum(daily_steps.values())
-    total_calories = sum(daily_calories.values())
-    total_distance = sum(daily_distance.values())
-    avg_hr = (
-        sum(r['bpm'] for r in heart_rate_readings) / len(heart_rate_readings)
-        if heart_rate_readings else 0
-    )
-
-    return {
-        'workouts': workouts,
-        'daily_steps': dict(daily_steps),
-        'daily_calories': dict(daily_calories),
-        'daily_distance': dict(daily_distance),
-        'heart_rate_readings': heart_rate_readings,
-        'total_steps': total_steps,
-        'total_calories': total_calories,
-        'total_distance_km': total_distance,
-        'avg_heart_rate': avg_hr,
-    }
-
-
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 def _render_dashboard(data: dict):
@@ -234,7 +388,8 @@ def _render_dashboard(data: dict):
     c1.metric('Total Steps', f"{data['total_steps']:,.0f}")
     c2.metric('Workouts', len(data['workouts']))
     c3.metric('Distance (km)', f"{data['total_distance_km']:.1f}")
-    c4.metric('Avg Heart Rate', f"{data['avg_heart_rate']:.0f} bpm" if data['avg_heart_rate'] else '—')
+    c4.metric('Avg Heart Rate',
+              f"{data['avg_heart_rate']:.0f} bpm" if data['avg_heart_rate'] else '—')
 
     st.divider()
 

@@ -3,4 +3,7 @@ port = 8080
 address = '0.0.0.0'
 enableCORS = false
 enableXsrfProtection = false
-runOnSave = true
+runOnSave = false
+# Apple Health exports can be 500MB+ — allow up to 2GB uploads / websocket messages.
+maxUploadSize = 2000
+maxMessageSize = 2000
