@@ -197,10 +197,9 @@ def _parse_xml_stream(xml_stream) -> dict:
             if w is not None:
                 workouts.append(w)
             elem.clear()
-        else:
-            # Keep generic elements small — clear anything we don't need
-            if tag not in ('HealthData',):
-                elem.clear()
+        # Don't clear WorkoutStatistics / MetadataEntry here — their parent
+        # Workout still needs to read them on its own 'end' event. They get
+        # freed when the parent Workout is cleared.
 
     workouts.sort(key=lambda w: w['start'], reverse=True)
 
